@@ -11,7 +11,7 @@
 			items = {},
 		},
 		schema = function(data)
-			return type(data.coins) == "number" and type(data.items) == "table", 
+			return typeof(data.coins) == "number" and typeof(data.items) == "table", 
 			"Invalid data format"
 		end,
 	})
@@ -82,7 +82,7 @@ local noYield = require(script.Parent.noYield)
 			items = {},
 		},
 		schema = function(value)
-			return type(value.coins) == "number", "coins must be a number"
+			return typeof(value.coins) == "number", "coins must be a number"
 		end,
 	}
 	```
@@ -97,10 +97,11 @@ export type StoreConfig<T> = {
 	importLegacyData: ((key: string) -> any?)?,
 	dataStoreService: DataStoreService?,
 	memoryStoreService: MemoryStoreService?,
-	useMock: boolean?,
 	changedCallbacks: { (key: string, newData: T, oldData: T?) -> () -> () }?,
 	logCallback: ((logMessage: Types.LogMessage) -> ())?,
 	onLockLost: ((key: string) -> ())?,
+	useMock: boolean?,
+	disableReferenceProtection: boolean?,
 }
 local storeConfigCheck = t.strictInterface({
 	name = t.string,
@@ -113,10 +114,11 @@ local storeConfigCheck = t.strictInterface({
 	importLegacyData = t.optional(t.callback),
 	dataStoreService = t.optional(t.any),
 	memoryStoreService = t.optional(t.any),
-	useMock = t.optional(t.boolean),
 	changedCallbacks = t.optional(t.array(t.callback)),
 	logCallback = t.optional(t.callback),
 	onLockLost = t.optional(t.callback),
+	useMock = t.optional(t.boolean),
+	disableReferenceProtection = t.optional(t.boolean),
 })
 
 type ListVersionParams = {
@@ -146,6 +148,7 @@ type StoreImpl<T> = {
 	save: (self: Store<T>, key: string) -> Promise.Promise,
 	close: (self: Store<T>) -> Promise.Promise,
 
+	peek: (self: Store<T>, key: string) -> Promise.TPromise<T>,
 	probeLockActive: (self: Store<T>, key: string) -> Promise.TPromise<boolean>,
 	listVersions: (self: Store<T>, params: ListVersionParams) -> Promise.TPromise<DataStoreVersionPages>,
 	readVersion: (self: Store<T>, key: string, version: string) -> Promise.TPromise<T, DataStoreKeyInfo>,
@@ -158,6 +161,7 @@ type StoreImpl<T> = {
 	saveAsync: (self: Store<T>, key: string) -> (),
 	closeAsync: (self: Store<T>) -> (),
 
+	peekAsync: (self: Store<T>, key: string) -> T,
 	probeLockActiveAsync: (self: Store<T>, key: string) -> boolean,
 	listVersionsAsync: (self: Store<T>, params: ListVersionParams) -> DataStoreVersionPages,
 	readVersionAsync: (self: Store<T>, key: string, version: string) -> (T, DataStoreKeyInfo),
@@ -185,7 +189,7 @@ Store.__index = Store
 		name = "PlayerData",
 		template = { coins = 0 },
 		schema = function(data)
-			return type(data.coins) == "number", "coins must be a number"
+			return typeof(data.coins) == "number", "coins must be a number"
 		end,
 		
 		-- Optional: Runs whenever data changes
@@ -270,6 +274,8 @@ local function createStore<T>(config: StoreConfig<T>): Store<T>
 		shardStore = dataStoreService:GetDataStore(`{Constants.SHARD_SCOPE}/{config.name}`),
 		txStore = dataStoreService:GetDataStore(`{Constants.TX_SCOPE}/{config.name}`),
 		lockHashMap = memoryStoreService:GetHashMap(`{Constants.LOCK_SCOPE}/{config.name}`),
+
+		disableReferenceProtection = config.disableReferenceProtection or false,
 	}
 
 	local ok, err = storeContext.schema(storeContext.template)
@@ -752,10 +758,12 @@ function Store:tx<T>(keys: { string }, transformFunction: (state: { [string]: T 
 				return Promise.reject("Transaction transform function returned false")
 			end
 
-			-- We deep copy here to prevent references to internal state from
-			-- being leaked. If we didn't, the transform function could modify
-			-- the state after it runs, which shouldn't be allowed.
-			nextState = Tables.copyDeep(nextState)
+			if self._ctx.disableReferenceProtection == false then
+				-- We deep copy here to prevent references to internal state from
+				-- being leaked. If we didn't, the transform function could modify
+				-- the state after it runs, which shouldn't be allowed.
+				nextState = Tables.copyDeep(nextState)
+			end
 
 			for _, key in keys do
 				local schemaOk, err = self._ctx.schema(nextState[key] :: any)
@@ -969,6 +977,64 @@ end
 ]=]
 function Store:closeAsync(): ()
 	self:close():expect()
+end
+
+--[=[
+	Returns the current data for the given key without loading it into the store.
+
+	```lua
+	store:peek("456123"):andThen(function(data)
+		print("Current coins:", data.coins)
+	end):catch(function(err)
+		warn("Failed to peek data:", err)
+	end)
+	```
+
+	@return Promise<T> -- Resolves with the current data
+	@within Store
+]=]
+function Store:peek<T>(key: string): Promise.TPromise<T>
+	return dataStoreRetry(function()
+			return self._ctx.recordStore:GetAsync(key)
+		end)
+		:andThen(function(record: Types.DataStoreRecord?)
+			if record == nil then
+				return nil
+			end
+			assert(record, "luau")
+
+			local file = record.file
+			if file then
+				local readParams: Files.ReadParams = {
+					store = self._ctx.shardStore,
+					file = file,
+				}
+				return Files.read(readParams)
+			end
+
+			return nil
+		end)
+		:andThen(function(txInfo: Types.TxInfo?)
+			if txInfo == nil then
+				return nil
+			end
+			assert(txInfo, "luau")
+
+			local readTxParams = {
+				store = self._ctx.txStore,
+				txInfo = txInfo,
+			}
+			return Transactions.readTx(readTxParams)
+		end)
+end
+
+--[=[
+	Syntactic sugar for `store:peek(key):expect()`.
+
+	See [Store:peek]
+]=]
+function Store:peekAsync<T>(key: string): T
+	return self:peek(key):expect()
 end
 
 --[=[

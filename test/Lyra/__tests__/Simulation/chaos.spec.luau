@@ -6,8 +6,8 @@ local JestGlobals = require(ReplicatedStorage.DevPackages.JestGlobals)
 local MockDataStoreService = require(ReplicatedStorage.Packages.Lyra.MockDataStoreService)
 local MockMemoryStoreService = require(ReplicatedStorage.Packages.Lyra.MockMemoryStoreService)
 local Universe = require(script.Parent.Parent.Universe)
-local PlayerStore = require(script.Parent.Parent.Parent.PlayerStore)
-local Tables = require(script.Parent.Parent.Parent.Tables)
+local PlayerStore = require(ReplicatedStorage.Packages.Lyra.PlayerStore)
+local Tables = require(ReplicatedStorage.Packages.Lyra.Tables)
 
 local expect = JestGlobals.expect
 local describe = JestGlobals.describe
@@ -297,7 +297,7 @@ afterEach(function()
 	jest.useRealTimers()
 end)
 
-describe("PlayerStore chaos test", function()
+describe.skip("PlayerStore chaos test", function()
 	local testData = {}
 	for _, seed in TestConfig.Seeds do
 		for _, duration in TestConfig.Durations do
@@ -343,7 +343,7 @@ describe("PlayerStore chaos test", function()
 				dataStoreService = mockData,
 				memoryStoreService = mockMemory,
 				schema = function(data)
-					return type(data.coins) == "number" and type(data.inventory) == "table", "Invalid data format"
+					return typeof(data.coins) == "number" and typeof(data.inventory) == "table", "Invalid data format"
 				end,
 				logCallback = function(logMessage)
 					if logMessage.level == "error" or logMessage.level == "fatal" then

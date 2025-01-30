@@ -11,7 +11,7 @@ Let's get Lyra set up in your game and cover the basics of saving player data.
 Add Lyra to your `wally.toml`:
 
 ```toml
-Lyra = "paradoxum-games/lyra@0.3.3"
+Lyra = "paradoxum-games/lyra@0.4.0"
 ```
 
 :::tip
@@ -114,22 +114,6 @@ store:txAsync({player1, player2}, function(state)
 end)
 ```
 
-## Promise-based API
-
-Lyra also offers a Promise-based API:
-
-```lua
-store:update(player, function(data)
-    data.coins -= itemPrice
-    data.inventory.weapon = "starter_sword"
-    return true
-end):andThen(function()
-    print("Purchase successful!")
-end):catch(function(err)
-    print(`Purchase failed: {err}`)
-end)
-```
-
 ## Importing Existing Data
 
 If you're migrating from another DataStore library, you can import your existing data:
@@ -155,6 +139,69 @@ local store = Lyra.createPlayerStore({
         return nil -- Return nil for new players to use template
     end,
 })
+```
+
+## ProcessReceipt Example
+
+Here's an example of how you would use Lyra in ProcessReceipt:
+
+```lua
+local ProductCallbacks = {
+    [12345] = function(player, receiptInfo, data)
+        data.coins += 100
+        return true
+    end,
+}
+
+local function processReceipt(receiptInfo)
+    local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
+    if not player then
+        return Enum.ProductPurchaseDecision.NotProcessedYet
+    end
+
+    local productCallback = ProductCallbacks[receiptInfo.ProductId]
+    if not productCallback then
+        return Enum.ProductPurchaseDecision.NotProcessedYet
+    end
+
+    local ok, result = pcall(function()
+        store:updateAsync(player, function(data)
+            -- Assuming you have 'purchaseHistory' in your template and schema:
+            if table.find(data.purchaseHistory, receiptInfo.PurchaseId) then
+               return false -- Prevent duplicate purchases
+            end
+            table.insert(data.purchaseHistory, receiptInfo.PurchaseId, 1)
+            for i = 1000, #data.purchaseHistory do
+                data.purchaseHistory[i] = nil -- Remove old purchases
+            end
+
+            return productCallback(player, receiptInfo, data)
+        end)
+        store:saveAsync(player)
+    end)
+    if not ok then
+        warn(`ProcessReceipt failed: {result}`)
+        return Enum.ProductPurchaseDecision.NotProcessedYet
+    end
+
+    return Enum.ProductPurchaseDecision.PurchaseGranted
+end
+```
+
+## Promise-based API
+
+Lyra also offers a Promise-based API:
+
+```lua
+store:update(player, function(data)
+    data.coins -= itemPrice
+    data.inventory.weapon = "starter_sword"
+    return true
+end):andThen(function()
+    print("Purchase successful!")
+end):catch(function(err)
+    print(`Purchase failed: {err}`)
+end)
 ```
 
 ## Next Steps

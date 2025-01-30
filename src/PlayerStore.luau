@@ -18,7 +18,7 @@ local Types = require(script.Parent.Types)
 			items = {},
 		},
 		schema = function(data)
-			return type(data.coins) == "number" and type(data.items) == "table",
+			return typeof(data.coins) == "number" and typeof(data.items) == "table",
 				"Invalid data format"
 		end,
 	})
@@ -58,6 +58,7 @@ type PlayerStoreImpl<T> = {
 	) -> Promise.Promise,
 	save: (self: PlayerStore<T>, player: Player) -> Promise.Promise,
 	close: (self: PlayerStore<T>) -> Promise.Promise,
+	peek: (self: PlayerStore<T>, userId: number) -> T,
 
 	getAsync: (self: PlayerStore<T>, player: Player) -> T,
 	loadAsync: (self: PlayerStore<T>, player: Player) -> (),
@@ -70,6 +71,7 @@ type PlayerStoreImpl<T> = {
 	) -> (),
 	saveAsync: (self: PlayerStore<T>, player: Player) -> (),
 	closeAsync: (self: PlayerStore<T>) -> (),
+	peekAsync: (self: PlayerStore<T>, userId: number) -> T,
 }
 
 type PlayerStoreProps<T> = {
@@ -87,6 +89,8 @@ type PlayerStoreProps<T> = {
 	.importLegacyData ((key: string) -> any?)? -- Optional function to import legacy data
 	.changedCallbacks { (key: string, newData: T, oldData: T?) -> () -> () }? -- Optional callbacks for data changes
 	.logCallback ((logMessage: LogMessage) -> ())? -- Optional callback for log messages
+	.memoryStoreService MemoryStoreService? -- Optional MemoryStoreService instance for mocking
+	.dataStoreService DataStoreService? -- Optional DataStoreService instance for mocking
 
 	@within PlayerStore
 ]=]
@@ -98,7 +102,9 @@ type PlayerStoreConfig<T> = {
 	importLegacyData: ((key: string) -> any?)?,
 	changedCallbacks: { (key: string, newData: T, oldData: T?) -> () -> () }?,
 	logCallback: ((logMessage: Types.LogMessage) -> ())?,
-	useMock: boolean?,
+	disableReferenceProtection: boolean?,
+	memoryStoreService: MemoryStoreService?,
+	dataStoreService: DataStoreService?,
 }
 
 type PlayerStore<T> = typeof(setmetatable({} :: PlayerStoreProps<T>, {} :: PlayerStoreImpl<T>))
@@ -119,7 +125,7 @@ PlayerStore.__index = PlayerStore
 		name = "PlayerData",
 		template = { coins = 0 },
 		schema = function(data)
-			return type(data.coins) == "number", "coins must be a number"
+			return typeof(data.coins) == "number", "coins must be a number"
 		end,
 
 		-- Optional: Runs whenever data changes
@@ -155,6 +161,9 @@ local function createPlayerStore<T>(config: PlayerStoreConfig<T>): PlayerStore<T
 		onLockLost = function(key: string)
 			self:_kickPlayer(key, "DataStore lock lost, please rejoin the game.")
 		end,
+		memoryStoreService = config.memoryStoreService,
+		dataStoreService = config.dataStoreService,
+		disableReferenceProtection = config.disableReferenceProtection,
 	}
 
 	local store = Store.createStore(storeConfig)
@@ -414,6 +423,32 @@ end
 ]=]
 function PlayerStore:closeAsync()
 	return self:close():expect()
+end
+
+--[=[
+	Returns the current data for the given key without loading it into the store.
+
+	```lua
+	playerStore:peek(userId):andThen(function(data)
+		print("Current coins:", data.coins)
+	end)
+	```
+
+	@return Promise<T> -- Resolves with the current data
+	@within PlayerStore
+]=]
+function PlayerStore:peek(userId: number)
+	local userIdKey = tostring(userId)
+	return self._store:peek(userIdKey)
+end
+
+--[=[
+	Syntactic sugar for `playerStore:peek(userId):expect()`.
+
+	See [PlayerStore:peek]
+]=]
+function PlayerStore:peekAsync(userId: number)
+	return self:peek(userId):expect()
 end
 
 return {
