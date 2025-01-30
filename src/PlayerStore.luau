@@ -102,6 +102,7 @@ type PlayerStoreConfig<T> = {
 	importLegacyData: ((key: string) -> any?)?,
 	changedCallbacks: { (key: string, newData: T, oldData: T?) -> () -> () }?,
 	logCallback: ((logMessage: Types.LogMessage) -> ())?,
+    useMock: boolean?,
 	disableReferenceProtection: boolean?,
 	memoryStoreService: MemoryStoreService?,
 	dataStoreService: DataStoreService?,
