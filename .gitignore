@@ -5,6 +5,8 @@
 /*.rbxlx
 /*.rbxl
 
+Lyra.rbxm
+
 Packages
 DevPackages
 
@@ -17,7 +19,6 @@ external
 
 node_modules
 
-/test/Simulation/Cases/TDSMigrate
-
 # Moonwave build output
 /build
+wally.lock
