@@ -11,7 +11,7 @@
 			items = {},
 		},
 		schema = function(data)
-			return typeof(data.coins) == "number" and typeof(data.items) == "table", 
+			return typeof(data.coins) == "number" and typeof(data.items) == "table",
 			"Invalid data format"
 		end,
 	})
@@ -22,7 +22,7 @@
 		return store:get("player_1")
 	end):andThen(function(data)
 		print(data.coins) -- 0
-		
+
 		-- Update data
 		return store:update("player_1", function(data)
 			data.coins += 100
@@ -68,7 +68,7 @@ local noYield = require(script.Parent.noYield)
 	.importLegacyData? (key: string) -> any? -- Function to import legacy data
 	.dataStoreService? DataStoreService -- Custom DataStore implementation
 	.useMock? boolean -- Use mock DataStore (Studio only)
-	.changedCallbacks? { (key: string, newData: T, oldData: T?) -> () -> () } -- Run when data changes
+	.changedCallbacks? { (key: string, newData: T, oldData: T?) -> () } -- Run when data changes
 	.logCallback? (logMessage: LogMessage) -> () -- Custom logging function
 	.onLockLost? (key: string) -> () -- Called if DataStore lock is lost
 
@@ -96,7 +96,7 @@ export type StoreConfig<T> = {
 	importLegacyData: ((key: string) -> any?)?,
 	dataStoreService: DataStoreService?,
 	memoryStoreService: MemoryStoreService?,
-	changedCallbacks: { (key: string, newData: T, oldData: T?) -> () -> () }?,
+	changedCallbacks: { (key: string, newData: T, oldData: T?) -> () }?,
 	logCallback: ((logMessage: Types.LogMessage) -> ())?,
 	onLockLost: ((key: string) -> ())?,
 	useMock: boolean?,
@@ -189,7 +189,7 @@ Store.__index = Store
 		schema = function(data)
 			return typeof(data.coins) == "number", "coins must be a number"
 		end,
-		
+
 		-- Optional: Runs whenever data changes
 		changedCallbacks = {
 			function(key, newData, oldData)
@@ -225,7 +225,6 @@ local function createStore<T>(config: StoreConfig<T>): Store<T>
 	local dataStoreService = config.dataStoreService
 	if dataStoreService == nil then
 		if config.useMock then
-			assert(RunService:IsStudio(), "useMock can only be true in Studio")
 			logger:log("info", `using mock DataStoreService`)
 			dataStoreService = (MockDataStoreService.new() :: any) :: DataStoreService
 		else
@@ -238,7 +237,6 @@ local function createStore<T>(config: StoreConfig<T>): Store<T>
 	local memoryStoreService = config.memoryStoreService
 	if memoryStoreService == nil then
 		if config.useMock then
-			assert(RunService:IsStudio(), "useMock can only be true in Studio")
 			logger:log("info", `using mock MemoryStoreService`)
 			memoryStoreService = (MockMemoryStoreService.new() :: any) :: MemoryStoreService
 		else
@@ -306,7 +304,7 @@ end
 	@error "Load already in progress" -- Another load is already in progress for this key
 	@error "Store is closed" -- The store has been closed
 	@return Promise -- Resolves when data is loaded
-	@within Store 
+	@within Store
 ]=]
 function Store:load(key: string, userIds: { number }?): Promise.Promise
 	assert(t.string(key))
@@ -367,6 +365,16 @@ function Store:load(key: string, userIds: { number }?): Promise.Promise
 	end)
 
 	self._loadPromises[key] = loadPromise
+
+	-- This chain does two things:
+	-- 1. finally: If loadPromise is already settled, its finally block might
+	--    run before the assignment above, leaving the promise in the table - so
+	--    we run finally here to ensure it's removed.
+	-- 2. catch: Some users might call load without handling rejections,
+	--    triggering unhandled rejection warnings. Since Lyra logs the root
+	--    error, we immediately mark the rejection as caught to silence the
+	--    warning. This *doesn't* consume the rejection; it still propagates to
+	--    the user.
 	loadPromise
 		:finally(function()
 			self._loadPromises[key] = nil
@@ -383,7 +391,7 @@ end
 
 --[=[
 	Syntactic sugar for `store:load(key):expect()`.
-	
+
 	See [Store:load]
 ]=]
 function Store:loadAsync(key: string, userIds: { number }?): ()
@@ -442,7 +450,7 @@ end
 
 --[=[
 	Syntactic sugar for `store:unload(key):expect()`.
-	
+
 	See [Store:unload]
 ]=]
 function Store:unloadAsync(key: string): ()
@@ -832,7 +840,7 @@ end
 
 --[=[
 	Forces an immediate save of the given key's data.
-	
+
 	:::info
 	Data is automatically saved periodically, so manual saves are usually only useful in scenarios where you need to guarantee data has saved, such as ProcessReceipt.
 	:::
