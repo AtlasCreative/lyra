@@ -3,6 +3,11 @@
 registry = "test"
 
 [[package]]
+name = "atlascreative/lyra"
+version = "0.6.0"
+dependencies = [["Promise", "evaera/promise@4.0.0"], ["t", "osyrisrblx/t@3.1.1"], ["Jest", "jsdotlua/jest@3.10.0"], ["JestGlobals", "jsdotlua/jest-globals@3.10.0"]]
+
+[[package]]
 name = "evaera/promise"
 version = "4.0.0"
 dependencies = []
@@ -251,8 +256,3 @@ dependencies = [["collections", "jsdotlua/collections@1.2.6"]]
 name = "osyrisrblx/t"
 version = "3.1.1"
 dependencies = []
-
-[[package]]
-name = "paradoxum-games/lyra"
-version = "0.6.0"
-dependencies = [["Promise", "evaera/promise@4.0.0"], ["t", "osyrisrblx/t@3.1.1"], ["Jest", "jsdotlua/jest@3.10.0"], ["JestGlobals", "jsdotlua/jest-globals@3.10.0"]]
